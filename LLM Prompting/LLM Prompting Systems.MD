@@ -1,6 +1,8 @@
 # LLM Prompting Systems
 
-A reference note covering large language model fundamentals and the major prompting techniques used in modern AI applications. The sections are arranged as a deliberate progression, where each technique builds on the ones that came before, beginning with the foundations of how LLMs work and ending with workflow-level patterns for building reliable AI systems.
+LLM prompting systems are the structured methods and patterns used to communicate with large language models so that they produce reliable, useful, and predictable outputs. While the underlying model remains fixed once trained, almost everything that determines whether an LLM is useful in a real application comes down to how it is instructed, what context it is given, and how its outputs are managed across one or many steps. Prompting has therefore matured from the simple act of asking a question into a layered discipline that spans single-prompt design, multi-step workflows, validation, and iterative refinement.
+
+This document walks through that landscape in a deliberate progression. The opening sections establish what LLMs are and how they are accessed in practice through system and user prompts. The middle sections cover the core single-prompt techniques, namely role-based prompting, Chain of Thought reasoning, ReAct for tool-using agents, and the meta-skill of prompt instruction refinement. The closing sections address workflow-level patterns, including prompt chaining, gate checks for validation, and feedback loops for iterative self-improvement. Read in order, the sections move from understanding what an LLM can do, to controlling how it behaves, to building reliable multi-step systems on top of it.
 
 ---
 
