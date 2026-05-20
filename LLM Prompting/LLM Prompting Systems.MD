@@ -200,11 +200,11 @@ Simply chaining prompts is not sufficient for building reliable systems, and int
 
 When gate checks pass, the chain continues. When a check fails, the system can respond in one of three ways. It can trigger an error and halt execution. It can retry the failed step. Alternatively, it can retry the failed step while including the reason for failure in the prompt, which makes subsequent errors less likely on retry.
 
-### Pydantic for Structured Validation
+### Example 1. Validating LLM output in a prompt chain.
 
-Python developers most commonly use **Pydantic** for structured data validation in gate checks. Pydantic is the most popular data validation and parsing library for Python. It uses Python's standard type hints to enforce data structure, ensuring that variables, API requests, and database inputs conform to the exact shapes and data types expected by the system.
+A gate check using Pydantic enforces that the LLM's output matches the expected schema for the next step in the chain.
 
-**Example.** A gate check using Pydantic enforces that the LLM's output matches the expected schema for the next step in the chain.
+Python developers most commonly use Pydantic for structured data validation in gate checks. Pydantic is the most popular data validation and parsing library for Python. It uses Python's standard type hints to enforce data structure, ensuring that variables, API requests, and database inputs conform to the exact shapes and data types expected by the system.
 
 ```python
 from pydantic import BaseModel, Field, ValidationError
@@ -229,6 +229,70 @@ except ValidationError as e:
 ```
 
 The gate check confirms that the title is between 10 and 100 characters, the summary is between 50 and 200 characters, and at least three tags are present. Any failure triggers a structured retry rather than allowing malformed data to propagate downstream.
+
+### Example 2. Gate checks in a ReAct environment with external tool failures.
+
+ReAct agents rely heavily on external tools such as APIs and function calls, but these tools can fail in many ways. A weather API may return a rate-limit error, a malformed JSON response, a network timeout, or a payload missing expected fields. Without a gate check, the agent passes the broken observation directly into its next Thought step, where it either crashes or produces a confused reasoning chain. A gate check sits between the Action and Observation phases, validates the raw tool output against an expected schema, and triggers a controlled retry when validation fails.
+
+```python
+from pydantic import BaseModel, Field, ValidationError
+from typing import Literal
+import requests
+
+# Expected schema for a successful weather API response
+class WeatherResponse(BaseModel):
+    location: str
+    temperature: float = Field(ge=-50, le=60)
+    rain_probability: int = Field(ge=0, le=100)
+    conditions: str
+    status: Literal["ok"] = "ok"
+
+# ReAct Action step with embedded gate check and retry
+def call_weather_api_with_gate(location: str, max_retries: int = 3):
+    for attempt in range(1, max_retries + 1):
+        try:
+            # Action: call the external tool
+            raw_response = requests.get(
+                f"https://api.weather.example/v1/forecast?loc={location}",
+                timeout=5
+            ).json()
+
+            # Gate Check: validate the observation against the schema
+            validated = WeatherResponse.model_validate(raw_response)
+
+            # Gate passed, return clean observation to the next Thought
+            return validated
+
+        except (ValidationError, requests.exceptions.RequestException) as e:
+            # Gate failed, log and retry
+            print(f"Attempt {attempt} failed: {e}")
+            if attempt == max_retries:
+                # Final failure, return a structured error the agent can reason about
+                return {"status": "error", "reason": str(e), "attempts": attempt}
+            continue
+```
+
+How this fits inside a ReAct loop is shown below.
+
+```python
+Thought 1.    I need current weather for Melbourne.
+Action 1.     call_weather_api_with_gate("Melbourne, AU")
+
+  [Inside the action]
+  Attempt 1.  API returns {"error": "rate_limit_exceeded"}.
+              Gate Check fails because the response does not match
+              the WeatherResponse schema.
+  Attempt 2.  API returns a valid payload.
+              Gate Check passes.
+
+Observation 1. WeatherResponse(location="Melbourne, AU", temperature=18,
+                rain_probability=80, conditions="afternoon showers")
+
+Thought 2.    Rain probability is 80 percent, so an umbrella is advisable.
+Final Answer. Yes, bring an umbrella.
+```
+
+The gate check ensures the agent's reasoning chain only ever receives well-formed observations. Transient external failures such as rate limits, timeouts, or schema drift are absorbed by the retry mechanism rather than corrupting the wider workflow. This pattern is what makes ReAct agents reliable enough for production use, because in practice external tools fail far more often than the LLM itself does.
 
 ---
 
