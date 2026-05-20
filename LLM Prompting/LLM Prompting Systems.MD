@@ -330,4 +330,7 @@ Iteration 3. LLM revises again.
 Final output. Polished email returned to the user.
 ```
 
+---
+
+<img src="images/llm_prompting_systems_progression.svg" width="800" alt="LLM Prompting System">
 
